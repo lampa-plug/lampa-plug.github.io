@@ -2,16 +2,27 @@
     'use strict';
 
     var STORAGE_KEY = 'lgbt_content_block';
+    var TOGGLE_KEY = 'gae_porn_for_alex_enabled';
     var LABEL = 'Gae Porn for Alex';
     var registered = false;
     var attempts = 0;
 
-    function defaultValue(Lampa) {
+    function defaultBlockValue(Lampa) {
         try {
             return !!(Lampa.VPN && Lampa.VPN.is && Lampa.VPN.is(['ru', 'by']));
         } catch (e) {
             return false;
         }
+    }
+
+    function defaultToggleValue(Lampa) {
+        var blocked = defaultBlockValue(Lampa);
+
+        if (Lampa.Storage && Lampa.Storage.get) {
+            blocked = Lampa.Storage.get(STORAGE_KEY, blocked);
+        }
+
+        return !blocked;
     }
 
     function registerToggle() {
@@ -25,16 +36,16 @@
         Lampa.SettingsApi.addParam({
             component: 'more',
             param: {
-                name: STORAGE_KEY,
+                name: TOGGLE_KEY,
                 type: 'trigger',
-                default: defaultValue(Lampa)
+                default: defaultToggleValue(Lampa)
             },
             field: {
                 name: LABEL
             },
             onChange: function (value) {
                 if (Lampa.Storage && Lampa.Storage.set) {
-                    Lampa.Storage.set(STORAGE_KEY, value === true || value === 'true');
+                    Lampa.Storage.set(STORAGE_KEY, !(value === true || value === 'true'));
                 }
             }
         });
