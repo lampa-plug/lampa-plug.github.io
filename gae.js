@@ -7,6 +7,26 @@
     var registered = false;
     var attempts = 0;
 
+    function isEnabled(value) {
+        return value === true || value === 'true' || value === 1 || value === '1';
+    }
+
+    function applyToggleValue(Lampa, value) {
+        if (Lampa.Storage && Lampa.Storage.set) {
+            Lampa.Storage.set(STORAGE_KEY, !isEnabled(value));
+        }
+    }
+
+    function getToggleValue(Lampa) {
+        var enabled = defaultToggleValue(Lampa);
+
+        if (Lampa.Storage && Lampa.Storage.get) {
+            enabled = Lampa.Storage.get(TOGGLE_KEY, enabled);
+        }
+
+        return enabled;
+    }
+
     function defaultBlockValue(Lampa) {
         try {
             return !!(Lampa.VPN && Lampa.VPN.is && Lampa.VPN.is(['ru', 'by']));
@@ -33,6 +53,11 @@
 
         registered = true;
 
+        applyToggleValue(Lampa, getToggleValue(Lampa));
+        setTimeout(function () {
+            applyToggleValue(Lampa, getToggleValue(Lampa));
+        }, 1000);
+
         Lampa.SettingsApi.addParam({
             component: 'more',
             param: {
@@ -44,9 +69,7 @@
                 name: LABEL
             },
             onChange: function (value) {
-                if (Lampa.Storage && Lampa.Storage.set) {
-                    Lampa.Storage.set(STORAGE_KEY, !(value === true || value === 'true'));
-                }
+                applyToggleValue(Lampa, value);
             }
         });
     }
