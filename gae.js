@@ -35,10 +35,28 @@
         };
     }
 
+    function patchStorageField(Lampa, enabled) {
+        if (!Lampa.Storage || !Lampa.Storage.field) return;
+
+        if (!Lampa.Storage.__gae_original_field) {
+            Lampa.Storage.__gae_original_field = Lampa.Storage.field;
+        }
+
+        Lampa.Storage.__gae_lgbt_enabled = enabled;
+        Lampa.Storage.field = function (name) {
+            if (Lampa.Storage.__gae_lgbt_enabled && name === STORAGE_KEY) {
+                return false;
+            }
+
+            return Lampa.Storage.__gae_original_field.apply(this, arguments);
+        };
+    }
+
     function applyToggleValue(Lampa, value) {
         var enabled = isEnabled(value);
 
         patchVpnCheck(Lampa, enabled);
+        patchStorageField(Lampa, enabled);
 
         if (Lampa.Storage && Lampa.Storage.set) {
             Lampa.Storage.set(STORAGE_KEY, !enabled);
