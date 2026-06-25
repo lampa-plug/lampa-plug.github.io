@@ -11,9 +11,37 @@
         return value === true || value === 'true' || value === 1 || value === '1';
     }
 
+    function isLgbtRegionCheck(regions) {
+        return regions &&
+            regions.length === 2 &&
+            regions.indexOf('ru') >= 0 &&
+            regions.indexOf('by') >= 0;
+    }
+
+    function patchVpnCheck(Lampa, enabled) {
+        if (!Lampa.VPN || !Lampa.VPN.is) return;
+
+        if (!Lampa.VPN.__gae_original_is) {
+            Lampa.VPN.__gae_original_is = Lampa.VPN.is;
+        }
+
+        Lampa.VPN.__gae_lgbt_enabled = enabled;
+        Lampa.VPN.is = function (regions) {
+            if (Lampa.VPN.__gae_lgbt_enabled && isLgbtRegionCheck(regions)) {
+                return false;
+            }
+
+            return Lampa.VPN.__gae_original_is.apply(this, arguments);
+        };
+    }
+
     function applyToggleValue(Lampa, value) {
+        var enabled = isEnabled(value);
+
+        patchVpnCheck(Lampa, enabled);
+
         if (Lampa.Storage && Lampa.Storage.set) {
-            Lampa.Storage.set(STORAGE_KEY, !isEnabled(value));
+            Lampa.Storage.set(STORAGE_KEY, !enabled);
         }
     }
 
