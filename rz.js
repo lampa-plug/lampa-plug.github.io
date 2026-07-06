@@ -4,13 +4,13 @@
     if (window.hdrezka_lampa_plugin) return;
     window.hdrezka_lampa_plugin = true;
 
-    var PLUGIN_VERSION = '2026-04-10.1';
+    var PLUGIN_VERSION = '2026-07-06.2';
     var SOURCE_NAME = 'HDRezka';
     var COMPONENT_NAME = 'hdrezka';
     var MIRROR_STORAGE_KEY = 'hdrezka_mirror';
     var CHOICE_STORAGE_KEY = 'hdrezka_choice';
     var VIEWED_STORAGE_KEY = 'hdrezka_viewed';
-    var DEFAULT_MIRROR = 'https://hdrezka.ag';
+    var DEFAULT_MIRROR = 'https://hdrezka.club';
 
     function log() {
         var args = Array.prototype.slice.call(arguments);
@@ -107,6 +107,16 @@
         }
 
         return {};
+    }
+
+    function getAccessBlockMessage(str, url) {
+        str = String(str || '');
+
+        if (/anubis_challenge|<title>\s*Проверяем,\s*что\s*вы\s*не\s*бот|cf-challenge|cf-browser-verification|g-recaptcha/i.test(str)) {
+            return 'HDRezka access check blocked this request. Set another HDRezka mirror that works from this device/network: ' + (url || getMirror());
+        }
+
+        return '';
     }
 
     function parsePlaylist(str) {
@@ -781,10 +791,19 @@
             network.clear();
             network.timeout(10000);
             network.native(pageUrl, function (str) {
+                var blockMessage = getAccessBlockMessage(str, pageUrl);
+
+                if (blockMessage) {
+                    log('page access blocked', pageUrl, blockMessage);
+                    componentEmpty(blockMessage);
+                    return;
+                }
+
                 extractPageData(str);
                 extract.page_url = pageUrl;
 
                 if (!extract.film_id) {
+                    log('page parse failed', pageUrl, 'bytes=' + String(str || '').length);
                     componentEmptyForQuery(searchTitle);
                     return;
                 }
@@ -806,11 +825,20 @@
             var links;
 
             str = String(str || '').replace(/\n/g, '');
-            links = str.match(/<li><a href=.*?<\/li>/g) || [];
+            links = [];
+
+            try {
+                $('<div>' + str + '</div>').find('li a').each(function () {
+                    links.push($(this));
+                });
+            }
+            catch (error) {
+                log('parseSearchResults dom failed', error);
+            }
 
             items = links.map(function (html) {
-                var node = $(html);
-                var link = $('a', node);
+                var node = html && html.jquery ? html : $(html);
+                var link = node.is('a') ? node : $('a', node);
                 var enty = $('.enty', link);
                 var rating = $('.rating', link);
                 var title = normalizeSpaces(enty.text());
@@ -844,6 +872,28 @@
             }).filter(function (item) {
                 return !!item.link;
             });
+
+            if (!items.length) {
+                links = str.match(/<li\b[^>]*>\s*<a\b[^>]*href=.*?<\/li>/g) || [];
+
+                items = links.map(function (html) {
+                    var node = $(html);
+                    var link = $('a', node);
+                    var text = normalizeSpaces(link.text());
+                    var yearMatch = text.match(/\b(\d{4})\b/);
+
+                    return {
+                        title: text,
+                        orig_title: '',
+                        quality: yearMatch ? yearMatch[1] : '----',
+                        info: '',
+                        year: yearMatch ? parseInt(yearMatch[1], 10) || 0 : 0,
+                        link: absoluteUrl(link.attr('href') || '')
+                    };
+                }).filter(function (item) {
+                    return !!item.link;
+                });
+            }
 
             return items;
         }
@@ -908,10 +958,23 @@
         function querySearch(query, callback, error) {
             network.clear();
             network.timeout(10000);
+            log('search request', host, query);
             network.native(host + '/engine/ajax/search.php', function (str) {
-                callback(parseSearchResults(str));
+                var blockMessage = getAccessBlockMessage(str, host);
+                var items = parseSearchResults(str);
+
+                if (blockMessage) {
+                    log('search access blocked', host, query, blockMessage);
+                    if (error) error(blockMessage);
+                    return;
+                }
+
+                log('search response', query, 'bytes=' + String(str || '').length, 'items=' + items.length);
+                callback(items);
             }, function (a, c) {
-                if (error) error(network.errorDecode(a, c));
+                var message = network.errorDecode(a, c);
+                log('search error', host, query, message, a, c);
+                if (error) error('HDRezka network error (' + host + '): ' + message);
             }, 'q=' + encodeURIComponent(query), {
                 dataType: 'text',
                 headers: getRequestHeaders(host)
